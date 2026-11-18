@@ -10,7 +10,7 @@ import sys
 import argparse
 
 bproc.init()
-np.random.seed(0) # "seed for reproducibility"
+
 
 
 # Hopefully now compatable with multithreading if we can thread each instance with its own directory argument
@@ -23,7 +23,17 @@ parser.add_argument(
     help="Directory where generated images will be saved"
 )
 
+# Changed the seed to be a parse argument so each thread generates its own saved seed
+parser.add_argument(
+    "--seed",
+    type=int,
+    default=0,
+    help="Random seed for generation"
+)
+
 args = parser.parse_args()
+
+np.random.seed(args.seed) # "seed for reproducibility"
 
 # The image will save to the specified output directory
 output_dir = args.output_dir
