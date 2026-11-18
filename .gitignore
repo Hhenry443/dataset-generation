@@ -18,3 +18,5 @@ output/*
 
 # macOS
 .DS_Store
+
+build/
