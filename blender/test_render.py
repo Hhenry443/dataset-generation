@@ -8,10 +8,9 @@ import os
 import csv
 import sys
 import argparse
+from mathutils import Matrix #its fine, blenderproc provides its own mathutils library
 
 bproc.init()
-
-
 
 # Hopefully now compatable with multithreading if we can thread each instance with its own directory argument
 parser = argparse.ArgumentParser()
@@ -45,37 +44,82 @@ cube.set_scale([1, 1, 1])
 #Creating the floor mesh
 bpy.ops.mesh.primitive_plane_add(size=10000, location = (0, 0, -1))
 floor = bpy.context.active_object
+
+
 #The material for the floor
-mat = bpy.data.materials.new(name = "floorMaterial")
+#Fixed an issue with the floor material not actually changing the colour shader for rendering.
+mat = bpy.data.materials.new(name="floorMaterial")
+mat.use_nodes = True
 floor.data.materials.append(mat)
 
+# Get the Principled BSDF shader
+bsdf = mat.node_tree.nodes.get("Principled BSDF")
 
-# Creating the Camera
+#same as in Aiden's git
+def spherical_to_cartesian(r, theta, phi):
+    return np.array([
+        r * np.sin(theta) * np.cos(phi),
+        r * np.sin(theta) * np.sin(phi),
+        r * np.cos(theta)
+    ])
 
-# Creating the Camera
-bproc.camera.set_resolution(256, 256)
+# Camera settings
+image_size = 256
+distance = 10 #Aiden has his at 2.5 which is far too close for a cube test
 
-# Position the camera (x, y, distance from cube z)
-camera_location = np.array([3, -3, 10])
+bproc.camera.set_resolution(image_size, image_size)
 
-#Calculate the direction from the camera towards the origin
-forward_vec = -camera_location
+# Camera position
+camera_theta = np.pi / 4
+location = spherical_to_cartesian(distance, camera_theta, np.pi / 2)
 
-# Calculate the camera rotation so it points towards the object
-camera_rotation = bproc.camera.rotation_from_forward_vec(forward_vec, "Z")
+# Make the camera point towards the origin
+rotation_matrix = bproc.camera.rotation_from_forward_vec(
+    np.array([0, 0, 0]) - location
+)
 
-# Combine the camera position and rotation
-camera_pose = bproc.math.build_transformation_mat(camera_location, camera_rotation)
+camera_pose = bproc.math.build_transformation_mat(
+    location,
+    rotation_matrix
+)
 
 bproc.camera.add_camera_pose(camera_pose)
 
 
-#lighting
-light = bproc.types.Light()
-light.set_type("POINT")
-light.set_location([3, -3, 5])
-light.set_energy(1000)
+# Sun (pointed so that it casts no shadows on the floor like in Aiden's breif)
+sun = bproc.types.Light()
+sun.set_type("SUN")
+sun.set_energy(1.5)
+sun.blender_obj.data.angle = np.pi / 2 
 
+'''
+# Spot (main lighting)
+light = bproc.types.Light()
+light.set_type("SPOT")
+light.set_location([0, 0, 2])
+light.set_energy(500)
+light.blender_obj.data.spot_size = np.pi / 2 # / 8 was the original but that was far too small
+'''
+
+# TEST: Spotlight directly above the cube
+light = bproc.types.Light()
+light.set_type("SPOT")
+light.set_location([0, 0, 2])
+light.set_rotation_euler([0, 0, 0])
+light.set_energy(500)
+light.blender_obj.data.spot_size = np.pi / 2 # / 8 was the original but that was far too small
+
+#
+# Personally from the tests the spotlight should be stronger and bigger than in the brief
+# Maybe the sun also needs to be just a little dimmer
+#
+
+
+# activate normal and distance rendering
+# if activate_antialiasing is True, uses Mist pass, else uses Z pass 
+bproc.renderer.enable_distance_output(activate_antialiasing=False)
+# set the amount of samples, which should be used for the color rendering
+bproc.renderer.set_max_amount_of_samples(100)
 
 generation_quantity = 10
 
@@ -100,16 +144,39 @@ for i in range(generation_quantity):
     cube.set_location(translation)
 
     # Randomising the floor hue
+    #Same bug fix with the floor shaders
     floor_hue = np.random.uniform(0, 1)
-
-    # Converting HSV to RGB
     hsv = (floor_hue, 0.6, 0.6)
     rgb = matplotlib.colors.hsv_to_rgb(hsv)
+    # Apply the colour to the floor material
+    #This is changed from the original code which is floor.active_material.diffuse_color, because someone on stack overflow says this is a better solution
+    bsdf.inputs["Base Color"].default_value = (*rgb, 1)
 
-    # Applying thee colour to floor
-    floor.active_material.diffuse_color = (*rgb, 1)
+    # Random spotlight position
+    spot_theta = np.random.uniform(0, np.pi / 4)
+    spot_phi = np.random.uniform(0, 2 * np.pi)
 
-    transformation_data.append([i, yaw, pitch, roll, floor_hue, x, y, z])
+    spot_location = spherical_to_cartesian(4, spot_theta, spot_phi)
+
+    #pointing to the origin but using a matrix
+    rotation_matrix = bproc.camera.rotation_from_forward_vec(np.array([0, 0, 0]) - spot_location)
+
+    # Point the spotlight towards the origin
+    # Convert to Blender's Matrix type, matching Aiden's original code
+    light_pose = Matrix(bproc.math.build_transformation_mat(spot_location, rotation_matrix))
+    # Testing fixing the spotlight to be directly above the cube
+    light.blender_obj.matrix_world = light_pose
+
+    #Random spotlight colours
+    spot_hue = np.random.uniform(0, 1)
+    hsv = (spot_hue, 1, 0.8)
+    rgb = matplotlib.colors.hsv_to_rgb(hsv)
+    light.set_color(rgb)
+
+
+
+    #Recording the Data
+    transformation_data.append([i, yaw, pitch, roll, floor_hue, x, y, z, spot_theta, spot_phi, spot_hue])
 
     # Rendering the Scene
     data = bproc.renderer.render()
@@ -127,7 +194,7 @@ for i in range(generation_quantity):
 with open(os.path.join(output_dir, "transformations.csv"), "w", newline = "") as file:
     writer = csv.writer(file)
 
-    writer.writerow(["image", "yaw", "pitch", "roll", "floor_hue", "x", "y", "z"])
+    writer.writerow(["image", "yaw", "pitch", "roll", "floor_hue", "x", "y", "z", "spot_theta", "spot_phi", "spot_hue"])
 
     writer.writerows(transformation_data)
 
