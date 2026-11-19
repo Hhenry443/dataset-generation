@@ -20,3 +20,5 @@ output/*
 .DS_Store
 
 build/
+
+.cache/clangd/index/main.cpp.CDEDFEC790D2C1C1.idx
