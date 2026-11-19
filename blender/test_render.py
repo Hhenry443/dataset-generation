@@ -1,3 +1,15 @@
+#
+# Current Issues:
+# Temporary cube sometimes appears partially clipped into the floor
+# This could be solved once the true model imports are used.
+#
+# Installing the data from hugging face.
+# I need an adviser.
+# 
+#
+
+
+
 
 import blenderproc as bproc
 import numpy as np
@@ -12,7 +24,7 @@ from mathutils import Matrix #its fine, blenderproc provides its own mathutils l
 
 bproc.init()
 
-# Hopefully now compatable with multithreading if we can thread each instance with its own directory argument
+# Hopefully now compatible with multithreading if we can thread each instance with its own directory argument
 parser = argparse.ArgumentParser()
 
 parser.add_argument(
@@ -28,6 +40,30 @@ parser.add_argument(
     type=int,
     default=0,
     help="Random seed for generation"
+)
+
+# argement to change the size of the image
+parser.add_argument(
+    "--image-size",
+    type=int,
+    default=256,
+    help="Resolution of the generated images (width and height)"
+)
+
+# Argument to change the number of images generated.
+parser.add_argument(
+    "--num-images",
+    type=int,
+    default=10,
+    help="Number of images to generate"
+)
+
+# Argument to change how far away the camera is from the object
+parser.add_argument(
+    "--camera-distance",
+    type=float,
+    default=2.5,
+    help="Distance of the camera from the object"
 )
 
 args = parser.parse_args()
@@ -64,8 +100,8 @@ def spherical_to_cartesian(r, theta, phi):
     ])
 
 # Camera settings
-image_size = 256
-distance = 10 #Aiden has his at 2.5 which is far too close for a cube test
+image_size = args.image_size
+distance = args.camera_distance #Aiden has his at 2.5 which is far too close for a cube test
 
 bproc.camera.set_resolution(image_size, image_size)
 
@@ -74,17 +110,13 @@ camera_theta = np.pi / 4
 location = spherical_to_cartesian(distance, camera_theta, np.pi / 2)
 
 # Make the camera point towards the origin
-rotation_matrix = bproc.camera.rotation_from_forward_vec(
-    np.array([0, 0, 0]) - location
-)
+rotation_matrix = bproc.camera.rotation_from_forward_vec(np.array([0, 0, 0]) - location)
+camera_pose = bproc.math.build_transformation_mat(location,rotation_matrix)
+bproc.camera.add_camera_pose(camera_pose) #frame = 0?
 
-camera_pose = bproc.math.build_transformation_mat(
-    location,
-    rotation_matrix
-)
-
-bproc.camera.add_camera_pose(camera_pose)
-
+# Focal length is given in millimieters by default, so we convert it to meters
+focal_length = bpy.data.cameras[0].lens/1000
+print(f"focal length: {focal_length}m")
 
 # Sun (pointed so that it casts no shadows on the floor like in Aiden's breif)
 sun = bproc.types.Light()
@@ -121,7 +153,7 @@ bproc.renderer.enable_distance_output(activate_antialiasing=False)
 # set the amount of samples, which should be used for the color rendering
 bproc.renderer.set_max_amount_of_samples(100)
 
-generation_quantity = 10
+generation_quantity = args.num_images
 
 #array to store the transformation data.
 transformation_data = []
@@ -200,3 +232,5 @@ with open(os.path.join(output_dir, "transformations.csv"), "w", newline = "") as
 
 print("Completed with no errors.")
 #Run through terminal
+
+#blenderproc run blender/test_render.py \ --output-dir NewDirectory \ --seed NewValue \ --image-size NewValue \ --num-images NewValue \ --camera-distance NewValue
