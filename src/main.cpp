@@ -92,7 +92,7 @@ int main() {
     // Each process recieves a different output directory to stop the overwriting
     //Each thread also gets its own seed.
 
-    int jobCount = 1;
+    int jobCount = 2;
     std::vector<pid_t> pids;
 
     for (int i = 0; i < jobCount; i++) {
