@@ -6,10 +6,14 @@
 #include <unistd.h>
 #include <string>
 #include <time.h>
+#include <vector>
+#include <thread>
+#include <future>
 
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
+#include "imgui_stdlib.h"
 
 #if defined(IMGUI_IMPL_OPENGL_ES2)
 #include <GLES2/gl2.h>
@@ -23,60 +27,6 @@
 static void glfw_error_callback(int error, const char* description)
 {
     fprintf(stderr, "GLFW Error %d: %s\n", error, description);
-}
-
-void runFile(std::string filename, std::string outputDir, int seed) {
-    // char const *args[] = {"python3", filename.c_str(), NULL};
-
-    std::cout << "Starting: " << filename
-              << " -> " << outputDir << std::endl;
-
-    //So this will create a separate process for this BlenderProc instance.
-    //So basically it can let multiple BelenderProc instances run at the same time. i think.
-    pid_t pid = fork();
-
-    if (pid == -1) {
-        //It will check if the process failed.
-        std::cerr << "Failed to create process." << std::endl;
-        return;
-    }
-
-    if (pid == 0) {
-
-        // child process will launch blenderproc
-        // then will change the child process with the blenderproc command, going to be real only some guy on stackoverflow knows how this works
-        // passing outputDir is how im making sure each instance saves its files separately, like in the python file
-        // basically so the csv files and images dont keep overwriting
-        // then we will go back and collect them
-
-        execl(
-            "./blender/.venv/bin/blenderproc",
-            "blenderproc",
-            "run",
-            filename.c_str(),
-            "--output-dir",
-            outputDir.c_str(),
-            "--seed",
-            std::to_string(seed).c_str(),
-            (char *)nullptr
-        );
-
-        // if execl fails
-        perror("Failed to launch BlenderProc");
-        exit(EXIT_FAILURE);
-    }
-
-    // Parent process will wait for BlenderProc to finish
-    int status;
-    waitpid(pid, &status, 0);
-
-    if (WIFEXITED(status) && WEXITSTATUS(status) == 0) {
-        std::cout << outputDir << " completed successfully."
-                  << std::endl;
-    } else {
-        std::cerr << outputDir << " failed."
-                  << std::endl;
-    }
 }
 
 pid_t startJob(std::string filename, std::string outputDir, int seed) {
@@ -100,43 +50,51 @@ pid_t startJob(std::string filename, std::string outputDir, int seed) {
     }
 
 }
-int main() {
-    // Get cpu clock time for benchmarking
-    clock_t begin = clock();
 
+bool waitForProcesses(std::vector<pid_t> v) {
+    for (pid_t pid : v) {
+        int status;
+        waitpid(pid, &status, 0);
+    }
+
+    return true;
+}
+
+int main() {
     glfwSetErrorCallback(glfw_error_callback);
     if (!glfwInit())
         return 1;
 
     // Select GL version + let the backend select a GLSL version
     const char* glsl_version = nullptr;
-#if defined(IMGUI_IMPL_OPENGL_ES2)
-    // GL ES 2.0 + GLSL 100 (WebGL 1.0)
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 2);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
-    glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_ES_API);
-#elif defined(IMGUI_IMPL_OPENGL_ES3)
-    // GL ES 3.0 + GLSL 300 es (WebGL 2.0)
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
-    glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_ES_API);
-#elif defined(__APPLE__)
-    // GL 3.2 + generally GLSL 150
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);  // 3.2+ only
-    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);            // Required on Mac
-#else
-    // GL 3.0 + generally GLSL 130
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
-    //glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);  // 3.2+ only
-    //glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);            // 3.0+ only
-#endif
+    
+    #if defined(IMGUI_IMPL_OPENGL_ES2)
+        // GL ES 2.0 + GLSL 100 (WebGL 1.0)
+        glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 2);
+        glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
+        glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_ES_API);
+    #elif defined(IMGUI_IMPL_OPENGL_ES3)
+        // GL ES 3.0 + GLSL 300 es (WebGL 2.0)
+        glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+        glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
+        glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_ES_API);
+    #elif defined(__APPLE__)
+        // GL 3.2 + generally GLSL 150
+        glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+        glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
+        glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);  // 3.2+ only
+        glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);            // Required on Mac
+    #else
+        // GL 3.0 + generally GLSL 130
+        glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+        glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
+        //glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);  // 3.2+ only
+        //glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);            // 3.0+ only
+    #endif
 
     // Create window with graphics context
     float main_scale = ImGui_ImplGlfw_GetContentScaleForMonitor(glfwGetPrimaryMonitor()); // Valid on GLFW 3.3+ only
-    GLFWwindow* window = glfwCreateWindow((int)(1280 * main_scale), (int)(800 * main_scale), "Dear ImGui GLFW+OpenGL3 example", nullptr, nullptr);
+    GLFWwindow* window = glfwCreateWindow((int)(1280 * main_scale), (int)(800 * main_scale), "Dataset Generation GUI", nullptr, nullptr);
     if (window == nullptr)
         return 1;
     glfwMakeContextCurrent(window);
@@ -147,7 +105,6 @@ int main() {
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO(); (void)io;
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
-    io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
 
     // Setup Dear ImGui style
     ImGuiStyle& style = ImGui::GetStyle();
@@ -163,9 +120,6 @@ int main() {
 
     // Setup Platform/Renderer backends
     ImGui_ImplGlfw_InitForOpenGL(window, true);
-#ifdef __EMSCRIPTEN__
-    ImGui_ImplGlfw_InstallEmscriptenCallbacks(window, "#canvas");
-#endif
     ImGui_ImplOpenGL3_Init(glsl_version);
 
     // Load Fonts
@@ -192,14 +146,7 @@ int main() {
     ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
     // Main loop
-#ifdef __EMSCRIPTEN__
-    // For an Emscripten build we are disabling file-system access, so let's not attempt to do a fopen() of the imgui.ini file.
-    // You may manually call LoadIniSettingsFromMemory() to load settings from your own storage.
-    io.IniFilename = nullptr;
-    EMSCRIPTEN_MAINLOOP_BEGIN
-#else
     while (!glfwWindowShouldClose(window))
-#endif
     {
         // Poll and handle events (inputs, window resize, etc.)
         // You can read the io.WantCaptureMouse, io.WantCaptureKeyboard flags to tell if dear imgui wants to use your inputs.
@@ -218,27 +165,48 @@ int main() {
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
-        // 2. Show a simple window that we create ourselves. We use a Begin/End pair to create a named window.
+        // Show a simple window that we create ourselves. We use a Begin/End pair to create a named window.
         {
-            static float f = 0.0f;
-            static int counter = 0;
+            std::vector<pid_t> pids;
 
-            ImGui::Begin("Hello, world!");                          // Create a window called "Hello, world!" and append into it.
+            static int process_count = 1;
+            static bool running = false;
+            static std::string output_dir { "output" };
+            static std::future<bool> fut;
+            
+            ImGui::Begin("Dataset Generation");                          // Create a window called "Hello, world!" and append into it.
 
-            ImGui::Text("This is some useful text.");               // Display some text (you can use a format strings too)
-            ImGui::Checkbox("Demo Window", &show_demo_window);      // Edit bools storing our window open/close state
-            ImGui::Checkbox("Another Window", &show_another_window);
+            ImGui::InputText("Output Directory: ", &output_dir);
+            ImGui::InputInt("# of processes", &process_count);
 
-            ImGui::SliderFloat("float", &f, 0.0f, 1.0f);            // Edit 1 float using a slider from 0.0f to 1.0f
-            ImGui::ColorEdit3("clear color", (float*)&clear_color); // Edit 3 floats representing a color
+            // ImGui::SliderFloat("float", &f, 0.0f, 1.0f);            // Edit 1 float using a slider from 0.0f to 1.0f
+            // ImGui::ColorEdit3("clear color", (float*)&clear_color); // Edit 3 floats representing a color
+            
+            ImGui::BeginDisabled(running);
+            if (ImGui::Button("Start Jobs")) {
+                running = true;
 
-            if (ImGui::Button("Button")) {
-                pid_t pid = startJob("./blender/test_render.py", "output", 1);
-            }                            // Buttons return true when clicked (most widgets return true when edited/activated)
+                for (int i = 0; i < process_count; ++i) {
+                    pid_t pid = startJob("./blender/test_render.py", "output/" + output_dir + std::string {'_'}  + std::to_string(i + 1), rand());
+                    pids.push_back(pid);
+                }
 
-            ImGui::SameLine();
-            ImGui::Text("counter = %d", counter);
+                fut = std::async(std::launch::async, waitForProcesses, std::move(pids));
+            }
+            ImGui::EndDisabled();
 
+            if (running && fut.valid() && fut.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+                bool ok = fut.get();
+                running = false;
+                std::cout << "FINISHED THEM ALL" << std::endl;
+            } 
+
+            if (running) {
+                ImGui::Text("Running!!!");
+            }
+
+                       
+            
             ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
             ImGui::End();
         }
@@ -254,9 +222,6 @@ int main() {
 
         glfwSwapBuffers(window);
     }
-#ifdef __EMSCRIPTEN__
-    EMSCRIPTEN_MAINLOOP_END;
-#endif
 
     // Cleanup
     ImGui_ImplOpenGL3_Shutdown();
@@ -290,10 +255,6 @@ int main() {
 
     std::cout << "Main block finished." << std::endl;
     
-    clock_t end = clock();
-    double time_spent = (double)(end - begin) / CLOCKS_PER_SEC;
-
-    std::cout << "Time Spent: " << time_spent << std::endl;
     return 0;
 }
 
