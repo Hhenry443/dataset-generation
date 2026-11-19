@@ -1,14 +1,14 @@
 #include <cstdlib>
 #include <iostream>
 #include <ostream>
-#include <thread>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
 #include <string>
+#include <time.h>
 
 void runFile(std::string filename, std::string outputDir, int seed) {
-// char const *args[] = {"python3", filename.c_str(), NULL};
+    // char const *args[] = {"python3", filename.c_str(), NULL};
 
     std::cout << "Starting: " << filename
               << " -> " << outputDir << std::endl;
@@ -32,7 +32,7 @@ void runFile(std::string filename, std::string outputDir, int seed) {
         // then we will go back and collect them
 
         execl(
-            "./.venv/bin/blenderproc",
+            "./blender/.venv/bin/blenderproc",
             "blenderproc",
             "run",
             filename.c_str(),
@@ -61,21 +61,56 @@ void runFile(std::string filename, std::string outputDir, int seed) {
     }
 }
 
+pid_t startJob(std::string filename, std::string outputDir, int seed) {
+    pid_t pid = fork(); // 0 for child, child pid in parent
+    
+    if (pid == 0) {
+        execl("./blender/.venv/bin/blenderproc",
+                "blenderproc",
+                "run",
+                filename.c_str(),
+                "--output-dir",
+                outputDir.c_str(),
+                "--seed",
+                std::to_string(seed).c_str(),
+                (char *)nullptr);
+
+        perror("Failed to launch BlenderProc");
+        exit(EXIT_FAILURE);
+    } else {
+        return pid;
+    }
+
+}
 int main() {
+    // Get cpu clock time for benchmarking
+    clock_t begin = clock();
 
     std::string script = "./blender/test_render.py";
 
     // So each thread will load its own BlenderProc process.
     // Each process recieves a different output directory to stop the overwriting
     //Each thread also gets its own seed.
-    std::thread t1(runFile, script, "output/thread_1", 1);
-    std::thread t2(runFile, script, "output/thread_2", 2);
 
-    t1.join();
-    t2.join();
+    int jobCount = 1;
+    std::vector<pid_t> pids;
 
-    std::cout << "Main thread finished." << std::endl;
+    for (int i = 0; i < jobCount; i++) {
+        pid_t child_pid = startJob(script, "output/output-" + std::to_string(i), rand());
+        pids.push_back(child_pid);
+    }
 
+    for (pid_t pid : pids) {
+        int status;
+        waitpid(pid, &status, 0); 
+    }
+
+    std::cout << "Main block finished." << std::endl;
+    
+    clock_t end = clock();
+    double time_spent = (double)(end - begin) / CLOCKS_PER_SEC;
+
+    std::cout << "Time Spent: " << time_spent << std::endl;
     return 0;
 }
 
