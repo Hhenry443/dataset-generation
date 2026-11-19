@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <string>
 #include <time.h>
+#include <vector>
 
 void runFile(std::string filename, std::string outputDir, int seed) {
     // char const *args[] = {"python3", filename.c_str(), NULL};
@@ -92,11 +93,11 @@ int main() {
     // Each process recieves a different output directory to stop the overwriting
     //Each thread also gets its own seed.
 
-    int jobCount = 1;
+    int jobCount = 5;
     std::vector<pid_t> pids;
 
     for (int i = 0; i < jobCount; i++) {
-        pid_t child_pid = startJob(script, "output/output-" + std::to_string(i), rand());
+        pid_t child_pid = startJob(script, "output/output-" + std::to_string(i + 1), rand());
         pids.push_back(child_pid);
     }
 
