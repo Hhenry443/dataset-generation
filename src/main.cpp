@@ -171,6 +171,8 @@ int main() {
 
             static int process_count = 1;
             static bool running = false;
+            static float progress = 0.0f;
+
             static std::string output_dir { "output" };
             static std::future<bool> fut;
             
@@ -198,10 +200,14 @@ int main() {
             if (running && fut.valid() && fut.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
                 bool ok = fut.get();
                 running = false;
+                progress = 1;
                 std::cout << "FINISHED THEM ALL" << std::endl;
             } 
 
             if (running) {
+                ImGui::ProgressBar(progress);
+                progress += 1 / progress;
+
                 ImGui::Text("Running!!!");
             }
 
@@ -231,30 +237,6 @@ int main() {
     glfwDestroyWindow(window);
     glfwTerminate();
 
-    return 0;
-
-
-    std::string script = "./blender/test_render.py";
-
-    // So each thread will load its own BlenderProc process.
-    // Each process recieves a different output directory to stop the overwriting
-    //Each thread also gets its own seed.
-
-    int jobCount = 2;
-    std::vector<pid_t> pids;
-
-    for (int i = 0; i < jobCount; i++) {
-        pid_t child_pid = startJob(script, "output/output-" + std::to_string(i), rand());
-        pids.push_back(child_pid);
-    }
-
-    for (pid_t pid : pids) {
-        int status;
-        waitpid(pid, &status, 0); 
-    }
-
-    std::cout << "Main block finished." << std::endl;
-    
     return 0;
 }
 
