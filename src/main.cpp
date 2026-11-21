@@ -29,7 +29,7 @@ static void glfw_error_callback(int error, const char* description)
     fprintf(stderr, "GLFW Error %d: %s\n", error, description);
 }
 
-pid_t startJob(std::string filename, std::string outputDir, int seed, int image_size, int num_images, float cam_dist) {
+pid_t startJob(std::string filename, std::string outputDir, int seed, int image_size, int num_images, float cam_dist, int offset) {
     pid_t pid = fork(); // 0 for child, child pid in parent
     
     if (pid == 0) {
@@ -47,6 +47,8 @@ pid_t startJob(std::string filename, std::string outputDir, int seed, int image_
                 std::to_string(num_images).c_str(),
                 "--camera-distance",
                 std::to_string(cam_dist).c_str(),
+                "--num-offset",
+                std::to_string(offset).c_str(),
                 (char *)nullptr);
 
         perror("Failed to launch BlenderProc");
@@ -128,27 +130,7 @@ int main() {
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init(glsl_version);
 
-    // Load Fonts
-    // - If fonts are not explicitly loaded, Dear ImGui will select an embedded font: either AddFontDefaultVector() or AddFontDefaultBitmap().
-    //   This selection is based on (style.FontSizeBase * style.FontScaleMain * style.FontScaleDpi) reaching a threshold.
-    // - You can load multiple fonts and use ImGui::PushFont()/PopFont() to select them.
-    // - If a file cannot be loaded, AddFont functions will return a nullptr. Please handle those errors in your code (e.g. use an assertion, display an error and quit).
-    // - Read 'docs/FONTS.md' for more instructions and details.
-    // - Use '#define IMGUI_ENABLE_FREETYPE' in your imconfig file to use FreeType for higher quality font rendering.
-    // - Remember that in C/C++ if you want to include a backslash \ in a string literal you need to write a double backslash \\ !
-    // - Our Emscripten build process allows embedding fonts to be accessible at runtime from the "fonts/" folder. See Makefile.emscripten for details.
-    //io.Fonts->AddFontDefaultVector();
-    //io.Fonts->AddFontDefaultBitmap();
-    //io.Fonts->AddFontFromFileTTF("c:\\Windows\\Fonts\\segoeui.ttf");
-    //io.Fonts->AddFontFromFileTTF("../../misc/fonts/DroidSans.ttf");
-    //io.Fonts->AddFontFromFileTTF("../../misc/fonts/Roboto-Medium.ttf");
-    //io.Fonts->AddFontFromFileTTF("../../misc/fonts/Cousine-Regular.ttf");
-    //ImFont* font = io.Fonts->AddFontFromFileTTF("c:\\Windows\\Fonts\\ArialUni.ttf");
-    //IM_ASSERT(font != nullptr);
-
     // Our state
-    bool show_demo_window = true;
-    bool show_another_window = false;
     ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
     // Main loop
@@ -187,24 +169,21 @@ int main() {
             static std::string output_dir { "output" };
             static std::future<bool> fut;
             
-            ImGui::Begin("Dataset Generation");                          // Create a window called "Hello, world!" and append into it.
+            ImGui::Begin("Dataset Generation");
 
             ImGui::InputText("Output Directory", &output_dir);
             ImGui::InputInt("Image Resolution (W & H)", &img_res);
-            ImGui::InputInt("# Images per process", &num_images);
+            ImGui::InputInt("# Images (will be split across processes)", &num_images);
             ImGui::InputFloat("Camera Distance", &cam_dist);
 
             ImGui::InputInt("# of processes", &process_count);
 
-            // ImGui::SliderFloat("float", &f, 0.0f, 1.0f);            // Edit 1 float using a slider from 0.0f to 1.0f
-            // ImGui::ColorEdit3("clear color", (float*)&clear_color); // Edit 3 floats representing a color
-            
             ImGui::BeginDisabled(running);
             if (ImGui::Button("Start Jobs")) {
                 running = true;
 
                 for (int i = 0; i < process_count; ++i) {
-                    pid_t pid = startJob("./blender/test_render.py", "output/" + output_dir + std::string {'_'}  + std::to_string(i + 1), rand(), img_res, num_images, cam_dist);
+                    pid_t pid = startJob("./blender/test_render.py", "output/" + output_dir, rand(), img_res, num_images / process_count, cam_dist, i);
                     pids.push_back(pid);
                 }
 

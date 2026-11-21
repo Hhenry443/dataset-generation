@@ -66,6 +66,14 @@ parser.add_argument(
     help="Distance of the camera from the object"
 )
 
+# Argument for image count offset
+parser.add_argument(
+    "--num-offset",
+    type=int,
+    default=0,
+    help="Offset for file names when outputting to one directory across processes"
+)
+
 args = parser.parse_args()
 
 np.random.seed(args.seed) # "seed for reproducibility"
@@ -208,7 +216,7 @@ for i in range(generation_quantity):
 
 
     #Recording the Data
-    transformation_data.append([i, yaw, pitch, roll, floor_hue, x, y, z, spot_theta, spot_phi, spot_hue])
+    transformation_data.append([i + (generation_quantity * args.num_offset) + 1, yaw, pitch, roll, floor_hue, x, y, z, spot_theta, spot_phi, spot_hue])
 
     # Rendering the Scene
     data = bproc.renderer.render()
@@ -218,12 +226,12 @@ for i in range(generation_quantity):
 
     from PIL import Image
     Image.fromarray(image).save(
-        os.path.join(output_dir, f"image_{i}.png")
+        os.path.join(output_dir, f"image_{i + (generation_quantity * args.num_offset) + 1}.png") # Need to offset the file name as we put them all in one directory
     )
 
     print(f"Generated image {i + 1}/", generation_quantity)
 
-with open(os.path.join(output_dir, "transformations.csv"), "w", newline = "") as file:
+with open(os.path.join(output_dir, "transformations.csv"), "a", newline = "") as file:
     writer = csv.writer(file)
 
     writer.writerow(["image", "yaw", "pitch", "roll", "floor_hue", "x", "y", "z", "spot_theta", "spot_phi", "spot_hue"])
