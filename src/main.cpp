@@ -29,7 +29,7 @@ static void glfw_error_callback(int error, const char* description)
     fprintf(stderr, "GLFW Error %d: %s\n", error, description);
 }
 
-pid_t startJob(std::string filename, std::string outputDir, int seed) {
+pid_t startJob(std::string filename, std::string outputDir, int seed, int image_size, int num_images, float cam_dist) {
     pid_t pid = fork(); // 0 for child, child pid in parent
     
     if (pid == 0) {
@@ -41,6 +41,12 @@ pid_t startJob(std::string filename, std::string outputDir, int seed) {
                 outputDir.c_str(),
                 "--seed",
                 std::to_string(seed).c_str(),
+                "--image-size",
+                std::to_string(image_size).c_str(),
+                "--num-images",
+                std::to_string(num_images).c_str(),
+                "--camera-distance",
+                std::to_string(cam_dist).c_str(),
                 (char *)nullptr);
 
         perror("Failed to launch BlenderProc");
@@ -169,16 +175,25 @@ int main() {
         {
             std::vector<pid_t> pids;
 
-            static int process_count = 1;
+            
             static bool running = false;
             static float progress = 0.0f;
+
+            static int process_count = 1;
+            static int img_res = 256;
+            static int num_images = 10;
+            static float cam_dist = 2.5f;
 
             static std::string output_dir { "output" };
             static std::future<bool> fut;
             
             ImGui::Begin("Dataset Generation");                          // Create a window called "Hello, world!" and append into it.
 
-            ImGui::InputText("Output Directory: ", &output_dir);
+            ImGui::InputText("Output Directory", &output_dir);
+            ImGui::InputInt("Image Resolution (W & H)", &img_res);
+            ImGui::InputInt("# Images per process", &num_images);
+            ImGui::InputFloat("Camera Distance", &cam_dist);
+
             ImGui::InputInt("# of processes", &process_count);
 
             // ImGui::SliderFloat("float", &f, 0.0f, 1.0f);            // Edit 1 float using a slider from 0.0f to 1.0f
@@ -189,7 +204,7 @@ int main() {
                 running = true;
 
                 for (int i = 0; i < process_count; ++i) {
-                    pid_t pid = startJob("./blender/test_render.py", "output/" + output_dir + std::string {'_'}  + std::to_string(i + 1), rand());
+                    pid_t pid = startJob("./blender/test_render.py", "output/" + output_dir + std::string {'_'}  + std::to_string(i + 1), rand(), img_res, num_images, cam_dist);
                     pids.push_back(pid);
                 }
 
