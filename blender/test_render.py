@@ -184,6 +184,7 @@ for i in range(generation_quantity):
     # Randomising the Floor Colour with a Randomly Generated Hue
     floor_hue = np.random.uniform(0, 1)
     hsv = (floor_hue, 0.6, 0.6)
+    rgb = matplotlib.colors.hsv_to_rgb(hsv)
 
     # Update the Floor Material's Base Colour
     bsdf.inputs["Base Color"].default_value = (*rgb, 1)
