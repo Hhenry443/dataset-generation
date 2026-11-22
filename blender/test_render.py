@@ -11,11 +11,7 @@ import sys
 import json
 import argparse
 from PIL import Image
-from mathutils import Matrix
-
-#----------INITILISATION----------#
-
-bproc.init()
+from mathutils import Matrix, Euler
 
 #----------PARSER ARGUMENTS----------#
 
@@ -120,9 +116,13 @@ for name, minimum, maximum in ranges:
     if minimum > maximum:
         parser.error(f"Minimum {name} value cannot be greater than maximum")
 
-#----------VARIABLE SETUP----------#
+#----------INITILISATION----------#
 
 np.random.seed(args.seed)
+bproc.init()
+
+#----------VARIABLE SETUP----------#
+
 output_dir = args.output_dir
 os.makedirs(output_dir, exist_ok=True)
 
@@ -159,11 +159,11 @@ print(f"Selected category: {args.model_category}")
 # Load the selected ShapeNet model
 model = bproc.loader.load_shapenet("data", used_synset_id=args.model_category, used_source_id=selected_object)
 
-# Move the model to the origin
+# Move the model origin to the centre of its bounding box
 bbox = model.get_bound_box()
 centre = np.mean(bbox, axis=0)
-centre_offset = -centre
-model.set_location(-centre)
+model.set_origin(point=centre)
+model.set_location((0, 0, 0))
 
 #----------SCENE SETUP----------#
 
@@ -178,6 +178,15 @@ floor.data.materials.append(mat)
 
 # Get the Principled BSDF shader
 bsdf = mat.node_tree.nodes.get("Principled BSDF")
+
+#----------TRANSFORMATION APPLICATION FUNCTION----------#
+
+# Applying Transformations using Matrix Basis
+def apply_matrix_basis_transformation(obj, translation=(0, 0, 0), rotation=(0, 0, 0)):
+    translation_matrix = Matrix.Translation(translation)
+    rotation_matrix = Euler(rotation).to_matrix().to_4x4()
+    transformation_matrix = rotation_matrix @ translation_matrix
+    obj.matrix_basis = transformation_matrix
 
 #----------LIGHTING SETUP----------#
 
@@ -237,21 +246,6 @@ transformation_data = []
 
 for i in range(generation_quantity):
 
-    # Randomly Generated Rotational Angles.
-    yaw = np.random.uniform(args.yaw_min, args.yaw_max)
-    pitch = np.random.uniform(args.pitch_min, args.pitch_max)
-    roll = np.random.uniform(args.roll_min, args.roll_max)
-
-    # Randomly generate the object's translation
-    x = np.random.uniform(args.x_min, args.x_max)
-    y = np.random.uniform(args.y_min, args.y_max)
-    z = np.random.uniform(args.z_min, args.z_max)
-
-    model.set_rotation_euler([pitch, roll, yaw])
-
-    translation = np.array([x, y, z])
-    model.set_location(centre_offset + translation)
-
     # Randomising the Floor Colour with a Randomly Generated Hue
     floor_hue = np.random.uniform(args.floor_hue_min, args.floor_hue_max)
     hsv = (floor_hue, 0.6, 0.6)
@@ -279,15 +273,38 @@ for i in range(generation_quantity):
     rgb = matplotlib.colors.hsv_to_rgb(hsv)
     light.set_color(rgb)
 
+    # Randomly generate the object's translation
+    x = np.random.uniform(args.x_min, args.x_max)
+    y = np.random.uniform(args.y_min, args.y_max)
+    z = np.random.uniform(args.z_min, args.z_max)
+
+    translation = (x, y, z)
+
+    # Randomly Generated Rotational Angles.
+    yaw = np.random.uniform(args.yaw_min, args.yaw_max)
+    pitch = np.random.uniform(args.pitch_min, args.pitch_max)
+    roll = np.random.uniform(args.roll_min, args.roll_max)
+
+    rotation = (yaw, pitch, roll)
+    
+    # Applying transformations using matrix_basis
+    apply_matrix_basis_transformation(model.blender_obj, translation, rotation)
+
     # Recording Transformation Data for This Image
     transformation_data.append([i, yaw, pitch, roll, floor_hue, x, y, z, spot_theta, spot_phi, spot_hue])
+
+    # Creating the 10-Dimensional Latent Vector
+    latent_vector = np.array([yaw, pitch, roll, floor_hue, spot_theta, spot_phi, spot_hue, x, y, z])
+
+    # Saving the latent vector for this image
+    np.save(os.path.join(output_dir, f"latent_{i}.npy"), latent_vector)
 
     # Rendering the Scene
     data = bproc.renderer.render()
 
     # Save Image
     image = data["colors"][0]
-    Image.fromarray(image).save(os.path.join(output_dir, f"image_{i}.png"))
+    Image.fromarray(image).save(os.path.join(output_dir, f"image_{i}.jpg"))
 
     print(f"Generated image {i + 1}/", generation_quantity)
 
