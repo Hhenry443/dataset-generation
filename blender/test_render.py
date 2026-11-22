@@ -8,6 +8,7 @@ import math
 import os
 import csv
 import sys
+import json
 import argparse
 from PIL import Image
 from mathutils import Matrix
@@ -21,77 +22,147 @@ bproc.init()
 parser = argparse.ArgumentParser()
 
 # Output directory for the generated images and the transformation data
-parser.add_argument(
-    "--output-dir",
-    type=str,
-    default="output",
-    help="Directory where generated images will be saved"
-)
+parser.add_argument("--output-dir", type=str, default="output", help="Directory where generated images will be saved")
 
 # Seed Generation (for Reproducibility)
-parser.add_argument(
-    "--seed",
-    type=int,
-    default=0,
-    help="Random seed for generation"
-)
+parser.add_argument("--seed", type=int, default=0, help="Random seed for generation")
 
 # Image Resolution
-parser.add_argument(
-    "--image-size",
-    type=int,
-    default=256,
-    help="Resolution of the generated images (width and height)"
-)
+parser.add_argument("--image-size", type=int, default=256, help="Resolution of the generated images (width and height)")
 
 # Number of Images Generated (Per Process)
-parser.add_argument(
-    "--num-images",
-    type=int,
-    default=10,
-    help="Number of images to generate"
-)
+parser.add_argument("--num-images", type=int, default=10, help="Number of images to generate")
 
 # Distance of Camera to Object
-parser.add_argument(
-    "--camera-distance",
-    type=float,
-    default=2.5,
-    help="Distance of the camera from the object"
-)
+parser.add_argument("--camera-distance", type=float, default=2.5, help="Distance of the camera from the object")
+
+#----------ROTATION ARGEMENT RANGES----------#
+
+# Yaw Rotation Range
+parser.add_argument("--yaw-min", type=float, default=-math.pi / 2, help="Minimum yaw rotation in radians")
+parser.add_argument("--yaw-max", type=float, default=math.pi / 2, help="Maximum yaw rotation in radians")
+
+# Pitch Rotation Range
+parser.add_argument("--pitch-min", type=float, default=-math.pi / 2, help="Minimum pitch rotation in radians")
+parser.add_argument("--pitch-max", type=float, default=math.pi / 2, help="Maximum pitch rotation in radians")
+
+# Roll rotation range
+parser.add_argument("--roll-min", type=float, default=-math.pi / 2, help="Minimum roll rotation in radians")
+parser.add_argument("--roll-max", type=float, default=math.pi / 2, help="Maximum roll rotation in radians")
+
+#----------TRANSLATION ARGUMENT RANGES----------#
+
+# X translation range
+parser.add_argument("--x-min", type=float, default=-0.5, help="Minimum X translation")
+parser.add_argument("--x-max", type=float, default=0.5, help="Maximum X translation")
+
+# Y translation range
+parser.add_argument("--y-min", type=float, default=-0.5, help="Minimum Y translation")
+parser.add_argument("--y-max", type=float, default=0.5, help="Maximum Y translation")
+
+# Z translation range
+parser.add_argument("--z-min", type=float, default=-0.5, help="Minimum Z translation")
+parser.add_argument("--z-max", type=float, default=0.5, help="Maximum Z translation")
+
+#----------LIGHTING ARGUMENT RANGES----------#
+
+# Floor colour hue range
+parser.add_argument("--floor-hue-min", type=float, default=0.0, help="Minimum floor colour hue")
+parser.add_argument("--floor-hue-max", type=float, default=1.0, help="Maximum floor colour hue")
+
+# Spotlight position ranges
+parser.add_argument("--spot-theta-min", type=float, default=0.0, help="Minimum spotlight theta in radians")
+parser.add_argument("--spot-theta-max", type=float, default=np.pi / 4, help="Maximum spotlight theta in radians")
+
+parser.add_argument("--spot-phi-min", type=float, default=0.0, help="Minimum spotlight phi in radians")
+parser.add_argument("--spot-phi-max", type=float, default=2 * np.pi, help="Maximum spotlight phi in radians")
+
+# Spotlight colour hue range
+parser.add_argument("--spot-hue-min", type=float, default=0.0, help="Minimum spotlight colour hue")
+parser.add_argument("--spot-hue-max", type=float, default=1.0, help="Maximum spotlight colour hue")
+
+#----------MODEL ARGUMENT SELECTION----------#
+
+# ShapeNet category ID
+parser.add_argument("--model-category", type=str, default="02691156", help="ShapeNet category ID of the model, default ID is for Airplanes")
+# ShapeNet model ID
+parser.add_argument("--model-id", type=str, default=None, help="Specific ShapeNet model ID to load")
 
 args = parser.parse_args()
 
-np.random.seed(args.seed)
+#----------INPUT ARGUMENT VALIDATION----------#
 
+# Checking that Image Generation Values are all Positive
+if args.num_images <= 0:
+    parser.error("--num-images must be greater than 0")
+
+if args.image_size <= 0:
+    parser.error("--image-size must be greater than 0")
+
+if args.camera_distance <= 0:
+    parser.error("--camera-distance must be greater than 0")
+
+# Checking that all the Max Values are Equal or Greater than the Minimum Values.
+ranges = [
+    ("yaw", args.yaw_min, args.yaw_max),
+    ("pitch", args.pitch_min, args.pitch_max),
+    ("roll", args.roll_min, args.roll_max),
+    ("x", args.x_min, args.x_max),
+    ("y", args.y_min, args.y_max),
+    ("z", args.z_min, args.z_max),
+    ("floor hue", args.floor_hue_min, args.floor_hue_max),
+    ("spot theta", args.spot_theta_min, args.spot_theta_max),
+    ("spot phi", args.spot_phi_min, args.spot_phi_max),
+    ("spot hue", args.spot_hue_min, args.spot_hue_max)
+]
+
+for name, minimum, maximum in ranges:
+    if minimum > maximum:
+        parser.error(f"Minimum {name} value cannot be greater than maximum")
+
+#----------VARIABLE SETUP----------#
+
+np.random.seed(args.seed)
 output_dir = args.output_dir
 os.makedirs(output_dir, exist_ok=True)
 
 #----------LOADING DATA MODELS----------#
 
-#Loads the object list used in the Equicaps dataset
+# Load the object list used by the EquiCaps dataset
 objects = np.load("data/all_objects.npy", allow_pickle=True)
 
-# Filter to Only Include Airplanes (for Testing)
-plane_objects = objects[objects[:, 0] == "02691156"]
+# Filter objects by the selected ShapeNet category
+category_objects = objects[objects[:, 0] == args.model_category]
 
-# Only Including Models that are Available Locally
-available_planes = [str(obj[1]) for obj in plane_objects if os.path.isdir(os.path.join("data", "02691156", str(obj[1])))]
+# Only include models that are available locally
+available_models = [
+    str(obj[1])
+    for obj in category_objects
+    if os.path.isdir(os.path.join("data", args.model_category, str(obj[1])))
+]
 
-if not available_planes:
-    raise RuntimeError("No matching airplane models found in the data directory.")
+if not available_models:
+    raise RuntimeError(f"No models found locally for category {args.model_category}.")
 
-# Randomly select one airplane
-selected_object = np.random.choice(available_planes)
+# Select a specific model if an ID was provided, otherwise select randomly
+if args.model_id is not None:
+    if args.model_id not in available_models:
+        raise RuntimeError(f"Model {args.model_id} is not available locally.")
+    
+    selected_object = args.model_id
+else:
+    selected_object = np.random.choice(available_models)
 
-print(f"Selected airplane: {selected_object}")
+print(f"Selected model: {selected_object}")
+print(f"Selected category: {args.model_category}")
 
 # Load the selected ShapeNet model
-model = bproc.loader.load_shapenet("data", used_synset_id="02691156", used_source_id=selected_object)
+model = bproc.loader.load_shapenet("data", used_synset_id=args.model_category, used_source_id=selected_object)
 
 # Move the model to the origin
 bbox = model.get_bound_box()
 centre = np.mean(bbox, axis=0)
+centre_offset = -centre
 model.set_location(-centre)
 
 #----------SCENE SETUP----------#
@@ -167,22 +238,22 @@ transformation_data = []
 for i in range(generation_quantity):
 
     # Randomly Generated Rotational Angles.
-    yaw = np.random.uniform(-math.pi / 2, math.pi / 2)
-    pitch = np.random.uniform(-math.pi / 2, math.pi / 2)
-    roll = np.random.uniform(-math.pi / 2, math.pi / 2)
+    yaw = np.random.uniform(args.yaw_min, args.yaw_max)
+    pitch = np.random.uniform(args.pitch_min, args.pitch_max)
+    roll = np.random.uniform(args.roll_min, args.roll_max)
 
-    # Randomly Generated Object Translation
-    x = np.random.uniform(-0.5, 0.5)
-    y = np.random.uniform(-0.5, 0.5)
-    z = np.random.uniform(-0.5, 0.5)
+    # Randomly generate the object's translation
+    x = np.random.uniform(args.x_min, args.x_max)
+    y = np.random.uniform(args.y_min, args.y_max)
+    z = np.random.uniform(args.z_min, args.z_max)
 
     model.set_rotation_euler([pitch, roll, yaw])
 
-    translation = [x, y, z]
-    model.set_location(translation)
+    translation = np.array([x, y, z])
+    model.set_location(centre_offset + translation)
 
     # Randomising the Floor Colour with a Randomly Generated Hue
-    floor_hue = np.random.uniform(0, 1)
+    floor_hue = np.random.uniform(args.floor_hue_min, args.floor_hue_max)
     hsv = (floor_hue, 0.6, 0.6)
     rgb = matplotlib.colors.hsv_to_rgb(hsv)
 
@@ -190,8 +261,8 @@ for i in range(generation_quantity):
     bsdf.inputs["Base Color"].default_value = (*rgb, 1)
 
     # Randomly Generated Spotlight Position
-    spot_theta = np.random.uniform(0, np.pi / 4)
-    spot_phi = np.random.uniform(0, 2 * np.pi)
+    spot_theta = np.random.uniform(args.spot_theta_min, args.spot_theta_max)
+    spot_phi = np.random.uniform(args.spot_phi_min, args.spot_phi_max)
 
     spot_location = spherical_to_cartesian(4, spot_theta, spot_phi)
 
@@ -203,7 +274,7 @@ for i in range(generation_quantity):
     light.blender_obj.matrix_world = light_pose
 
     # Randomly Generated Spotlight Colours
-    spot_hue = np.random.uniform(0, 1)
+    spot_hue = np.random.uniform(args.spot_hue_min, args.spot_hue_max)
     hsv = (spot_hue, 1, 0.8)
     rgb = matplotlib.colors.hsv_to_rgb(hsv)
     light.set_color(rgb)
@@ -229,4 +300,48 @@ with open(os.path.join(output_dir, "transformations.csv"), "w", newline = "") as
     writer.writerow(["image", "yaw", "pitch", "roll", "floor_hue", "x", "y", "z", "spot_theta", "spot_phi", "spot_hue"])
     writer.writerows(transformation_data)
 
+#----------SAVE GENERATION METADATA----------#
+
+# Store the Settings used to Generate the Dataset into a JSON File
+metadata = {
+    "seed": args.seed,
+
+    "model": {
+        "category": args.model_category,
+        "model_id": selected_object
+    },
+
+    "generation": {
+        "num_images": args.num_images,
+        "image_size": args.image_size,
+        "camera_distance": args.camera_distance
+    },
+
+    "rotation_ranges": {
+        "yaw": [args.yaw_min, args.yaw_max],
+        "pitch": [args.pitch_min, args.pitch_max],
+        "roll": [args.roll_min, args.roll_max]
+    },
+
+    "translation_ranges": {
+        "x": [args.x_min, args.x_max],
+        "y": [args.y_min, args.y_max],
+        "z": [args.z_min, args.z_max]
+    },
+
+    "lighting_ranges": {
+        "floor_hue": [args.floor_hue_min, args.floor_hue_max],
+        "spot_theta": [args.spot_theta_min, args.spot_theta_max],
+        "spot_phi": [args.spot_phi_min, args.spot_phi_max],
+        "spot_hue": [args.spot_hue_min, args.spot_hue_max]
+    }
+}
+
+# Save metadata as a JSON file
+with open(os.path.join(output_dir, "metadata.json"), "w") as file:
+    json.dump(metadata, file, indent=4)
+
+#----------TERMINAL OUTPUT----------#
+
+print("Generation metadata saved.")
 print("Completed with no errors.")
