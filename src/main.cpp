@@ -33,7 +33,7 @@ void runFile(std::string filename, std::string outputDir, int seed) {
         // then we will go back and collect them
 
         execl(
-            "./blender/.venv/bin/blenderproc",
+            "./.venv/bin/blenderproc", //Our paths differ
             "blenderproc",
             "run",
             filename.c_str(),
@@ -66,7 +66,7 @@ pid_t startJob(std::string filename, std::string outputDir, int seed) {
     pid_t pid = fork(); // 0 for child, child pid in parent
     
     if (pid == 0) {
-        execl("./blender/.venv/bin/blenderproc",
+        execl("./.venv/bin/blenderproc", //This differs between us
                 "blenderproc",
                 "run",
                 filename.c_str(),
@@ -93,7 +93,7 @@ int main() {
     // Each process recieves a different output directory to stop the overwriting
     //Each thread also gets its own seed.
 
-    int jobCount = 5;
+    int jobCount = 2;
     std::vector<pid_t> pids;
 
     for (int i = 0; i < jobCount; i++) {
@@ -115,5 +115,8 @@ int main() {
     return 0;
 }
 
-//clang++ -std=c++17 -pthread src/main.cpp -o generator
-//./generator
+// cmake -S . -B build
+// cmake --build build
+// ./build/ds-gen
+
+// cmake --build build && ./build/ds-gen
