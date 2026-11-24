@@ -33,7 +33,7 @@ pid_t startJob(std::string filename, std::string outputDir, int seed, int image_
     pid_t pid = fork(); // 0 for child, child pid in parent
     
     if (pid == 0) {
-        execl("./blender/.venv/bin/blenderproc",
+        execl("./.venv/bin/blenderproc", //This differs between us
                 "blenderproc",
                 "run",
                 filename.c_str(),
@@ -234,5 +234,8 @@ int main() {
     return 0;
 }
 
-//clang++ -std=c++17 -pthread src/main.cpp -o generator
-//./generator
+// cmake -S . -B build
+// cmake --build build
+// ./build/ds-gen
+
+// cmake --build build && ./build/ds-gen

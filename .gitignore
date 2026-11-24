@@ -8,6 +8,11 @@ __pycache__/
 output/*
 !output/.gitkeep
 
+# Dataset files
+data/*
+!data/all_objects.npy
+!data/taxonomy.json
+
 # Blender files
 *.blend1
 *.blend2
@@ -19,8 +24,8 @@ output/*
 # macOS
 .DS_Store
 
+# CMake build files
 build/
 
-.cache/clangd/index/main.cpp.CDEDFEC790D2C1C1.idx
-
-.cache/clangd/index/
+# Clangd cache
+.cache/
