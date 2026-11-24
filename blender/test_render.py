@@ -132,7 +132,7 @@ os.makedirs(output_dir, exist_ok=True)
 #----------LOADING DATA MODELS----------#
 
 # Load the object list used by the EquiCaps dataset
-objects = np.load("data/all_objects.npy", allow_pickle=True)
+objects = np.load("./data/all_objects.npy", allow_pickle=True)
 
 # Filter objects by the selected ShapeNet category
 category_objects = objects[objects[:, 0] == args.model_category]
@@ -141,7 +141,7 @@ category_objects = objects[objects[:, 0] == args.model_category]
 available_models = [
     str(obj[1])
     for obj in category_objects
-    if os.path.isdir(os.path.join("data", args.model_category, str(obj[1])))
+    if os.path.isdir(os.path.join("./data", args.model_category, str(obj[1])))
 ]
 
 if not available_models:

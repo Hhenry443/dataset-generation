@@ -29,11 +29,11 @@ static void glfw_error_callback(int error, const char* description)
     fprintf(stderr, "GLFW Error %d: %s\n", error, description);
 }
 
-pid_t startJob(std::string filename, std::string outputDir, int seed, int image_size, int num_images, float cam_dist, int offset) {
+pid_t startJob(std::string filename, std::string outputDir, int seed, int image_size, int num_images, float cam_dist) {
     pid_t pid = fork(); // 0 for child, child pid in parent
     
     if (pid == 0) {
-        execl("./.venv/bin/blenderproc", //This differs between us
+        execl("./blender/.venv/bin/blenderproc", //This differs between us
                 "blenderproc",
                 "run",
                 filename.c_str(),
@@ -47,8 +47,6 @@ pid_t startJob(std::string filename, std::string outputDir, int seed, int image_
                 std::to_string(num_images).c_str(),
                 "--camera-distance",
                 std::to_string(cam_dist).c_str(),
-                "--num-offset",
-                std::to_string(offset).c_str(),
                 (char *)nullptr);
 
         perror("Failed to launch BlenderProc");
@@ -183,7 +181,7 @@ int main() {
                 running = true;
 
                 for (int i = 0; i < process_count; ++i) {
-                    pid_t pid = startJob("./blender/test_render.py", "output/" + output_dir, rand(), img_res, num_images / process_count, cam_dist, i);
+                    pid_t pid = startJob("./blender/test_render.py", "output/" + output_dir, rand(), img_res, num_images / process_count, cam_dist);
                     pids.push_back(pid);
                 }
 
@@ -192,7 +190,6 @@ int main() {
             ImGui::EndDisabled();
 
             if (running && fut.valid() && fut.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
-                bool ok = fut.get();
                 running = false;
                 progress = 1;
                 std::cout << "FINISHED THEM ALL" << std::endl;
