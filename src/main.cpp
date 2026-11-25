@@ -56,7 +56,10 @@ typedef struct JobParameters {
 struct Job {
     std::string name;
     pid_t pid;
+    int finished = 0;
+    int total = 0;
     JobParams *JP;
+    bool running = false;
 };
 
 static void glfw_error_callback(int error, const char* description)
@@ -64,17 +67,47 @@ static void glfw_error_callback(int error, const char* description)
     fprintf(stderr, "GLFW Error %d: %s\n", error, description);
 }
 
-pid_t startJob(Job *J) {
-    pid_t pid = fork(); // 0 for child, child pid in parent
+void startJob(Job *J) {
+    FILE *fp;
+    int status;
+    char path[PATH_MAX];
     
-    if (pid == 0) {
-        if (J->JP->model_id != "") {
+        std::string output_dir = "output/" + J->JP->output_dir;
+        
+        if (J->JP->model_id == "") {
+            J->running = true;
+
+            fp = popen("./blender/.venv/bin/blenderproc run ./blender/test_render.py", "r");
+
+            if (fp == NULL) {
+                std::cerr << "Something went wrong." << std::endl;
+            }
+
+            while (fgets(path, PATH_MAX, fp) != NULL) {
+                if (path[0] == '@') {
+                    J->finished++;
+                    std::cout << path << std::endl;
+                }
+            }
+
+
+            J->running = false;
+            status = pclose(fp);
+
+            if (status == -1) {
+                std::cerr << "Something went wrong." << std::endl;
+             } else {
+                std::cerr << "Should be ok" << std::endl;
+            }
+
+            return;
+
             execl("./blender/.venv/bin/blenderproc", //This differs between us
                 "blenderproc",
                 "run",
                 J->JP->filename.c_str(),
                 "--output-dir",
-                J->JP->output_dir.c_str(),
+                output_dir.c_str(),
                 "--seed",
                 std::to_string(J->JP->seed).c_str(),
                 "--image-size",
@@ -134,7 +167,7 @@ pid_t startJob(Job *J) {
                 "run",
                 J->JP->filename.c_str(),
                 "--output-dir",
-                J->JP->output_dir.c_str(),
+                output_dir.c_str(),
                 "--seed",
                 std::to_string(J->JP->seed).c_str(),
                 "--image-size",
@@ -190,16 +223,14 @@ pid_t startJob(Job *J) {
         }
         perror("Failed to launch BlenderProc");
         exit(EXIT_FAILURE);
-    } else {
-        return pid;
-    }
-
 }
 
 bool waitForProcesses(std::vector<Job *> vj) {
     for (Job *j : vj) {
         int status;
-        waitpid(j->pid, &status, 0);
+        if (j->running) {
+            return false;
+        }
     }
 
     return true;
@@ -270,6 +301,8 @@ int main() {
     // Our state
     ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
+    std::vector<Job *> jobs;
+
     // Main loop
     while (!glfwWindowShouldClose(window))
     {
@@ -290,11 +323,10 @@ int main() {
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
+
         // Show a simple window that we create ourselves. We use a Begin/End pair to create a named window.
         {
-            std::vector<Job *> jobs;
-
-            JobParams JP {};
+            static JobParams JP {};
 
             static bool running = false;
             static float progress = 0.0f;
@@ -358,11 +390,14 @@ int main() {
                 running = true;
 
                 JP.filename = "./blender/test_render.py";
-
-                for (int i = 0; i < JP.process_count; ++i) {
-                    Job j = {"Worker " + std::to_string(i), 0, &JP};
                 
-                    j.pid = startJob(&j);
+                for (int i = 0; i < JP.process_count; ++i) {
+                    JobParams curr_jp = JP;
+                    curr_jp.output_dir = curr_jp.output_dir + std::to_string(i);
+
+                    Job j = {"Worker " + std::to_string(i),0, 0, JP.num_images, &curr_jp};
+                
+                    startJob(&j);
 
                     jobs.push_back(&j);
                 }
@@ -378,8 +413,19 @@ int main() {
             } 
 
             if (running) {
+
+                int finished_all = 0;
+                int total_all = 0;
+                // progress is equal to 
+                for (Job *j: jobs) {
+                    std::cout << j->finished << std::endl;
+                    finished_all += j->finished;
+                    total_all += j->total;
+                }
+
                 ImGui::ProgressBar(progress);
-                progress += 1 / progress;
+
+                progress = (float)finished_all / (float)total_all;
 
                 ImGui::Text("Running!!!");
             }
