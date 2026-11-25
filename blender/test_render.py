@@ -1,5 +1,8 @@
 #----------IMPORTS----------#
 
+
+
+
 import blenderproc as bproc
 import numpy as np
 import bpy
@@ -129,7 +132,7 @@ os.makedirs(output_dir, exist_ok=True)
 #----------LOADING DATA MODELS----------#
 
 # Load the object list used by the EquiCaps dataset
-objects = np.load("data/all_objects.npy", allow_pickle=True)
+objects = np.load("./data/all_objects.npy", allow_pickle=True)
 
 # Filter objects by the selected ShapeNet category
 category_objects = objects[objects[:, 0] == args.model_category]
@@ -138,7 +141,7 @@ category_objects = objects[objects[:, 0] == args.model_category]
 available_models = [
     str(obj[1])
     for obj in category_objects
-    if os.path.isdir(os.path.join("data", args.model_category, str(obj[1])))
+    if os.path.isdir(os.path.join("./data", args.model_category, str(obj[1])))
 ]
 
 if not available_models:
@@ -307,7 +310,7 @@ for i in range(generation_quantity):
     Image.fromarray(image).save(os.path.join(output_dir, f"image_{i}.jpg"))
 
     print(f"Generated image {i + 1}/", generation_quantity)
-
+    print(f"@@PROGRESS {i} {generation_quantity}", flush=True)
 #----------SAVE TRANSFORMATION DATA----------#
 
 # Saving the Transformation Parameters into a CSV File
