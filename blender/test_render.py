@@ -310,7 +310,7 @@ for i in range(generation_quantity):
     Image.fromarray(image).save(os.path.join(output_dir, f"image_{i}.jpg"))
 
     print(f"Generated image {i + 1}/", generation_quantity)
-
+    print(f"@@PROGRESS {i} {generation_quantity}", flush=True)
 #----------SAVE TRANSFORMATION DATA----------#
 
 # Saving the Transformation Parameters into a CSV File

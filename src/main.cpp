@@ -9,6 +9,7 @@
 #include <vector>
 #include <thread>
 #include <future>
+#include <math.h>
 
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
@@ -20,16 +21,12 @@
 #endif
 #include <GLFW/glfw3.h>
 
-#ifdef __EMSCRIPTEN__
-#include "../libs/emscripten/emscripten_mainloop_stub.h"
-#endif
-
 static void glfw_error_callback(int error, const char* description)
 {
     fprintf(stderr, "GLFW Error %d: %s\n", error, description);
 }
 
-pid_t startJob(std::string filename, std::string outputDir, int seed, int image_size, int num_images, float cam_dist) {
+pid_t startJob(std::string filename, std::string outputDir, int seed, int image_size, int num_images, float cam_dist, float yaw_min, float yaw_max) {
     pid_t pid = fork(); // 0 for child, child pid in parent
     
     if (pid == 0) {
@@ -159,29 +156,110 @@ int main() {
             static bool running = false;
             static float progress = 0.0f;
 
+            // PARSER ARGUMENTS
             static int process_count = 1;
             static int img_res = 256;
             static int num_images = 10;
             static float cam_dist = 2.5f;
-
             static std::string output_dir { "output" };
+
+            // ROTATION ARGUMENT RANGES
+            static float yaw_min = M_PI / 2;
+            static float yaw_max = M_PI / 2;
+            
+            static float pitch_min = M_PI / 2;
+            static float pitch_max = M_PI / 2;
+
+            static float roll_min = M_PI / 2;
+            static float roll_max = M_PI / 2;
+
+            // Translation Argument Ranges
+            static float x_min = 0.5;
+            static float x_max = 0.5;
+            
+            static float y_min = 0.5;
+            static float y_max = 0.5;
+
+            static float z_min = 0.5;
+            static float z_max = 0.5;
+            
+            // Lighting Argument Ranges
+            static float floor_hue_min = 0.0f;
+            static float floor_hue_max = 1.0f;
+
+            static float spot_theta_min = 0.0f;
+            static float spot_theta_max = M_PI / 4;
+
+            static float spot_phi_min = .0f;
+            static float spot_phi_max = 2 * M_PI;
+
+            static float spot_hue_min = 0.0f;
+            static float spot_hue_max = 1.0f;
+
+            // Model Arguments
+            static std::string model_category = "02691156";
+            static std::string model_id;
+
             static std::future<bool> fut;
             
             ImGui::Begin("Dataset Generation");
 
-            ImGui::InputText("Output Directory", &output_dir);
-            ImGui::InputInt("Image Resolution (W & H)", &img_res);
-            ImGui::InputInt("# Images (will be split across processes)", &num_images);
-            ImGui::InputFloat("Camera Distance", &cam_dist);
+            if (ImGui::CollapsingHeader("Parser Arguments")) {
+                ImGui::InputText("Output Directory", &output_dir);
+                ImGui::InputInt("Image Resolution (W & H)", &img_res);
+                ImGui::InputInt("# Images (will be split across processes)", &num_images);
+                ImGui::InputFloat("Camera Distance", &cam_dist);
+                ImGui::InputInt("# of processes", &process_count);
+            }
+            
+            if (ImGui::CollapsingHeader("Rotation Argument Ranges")) {
+                ImGui::InputFloat("Yaw Min", &yaw_min);
+                ImGui::InputFloat("Yaw Max", &yaw_max);
 
-            ImGui::InputInt("# of processes", &process_count);
+                ImGui::InputFloat("Pitch Min", &pitch_min);
+                ImGui::InputFloat("Pitch Max", &pitch_max);
+
+                ImGui::InputFloat("Roll Min", &roll_min);
+                ImGui::InputFloat("Roll Max", &roll_max);
+
+            }
+
+            if (ImGui::CollapsingHeader("Translation Argument Ranges")) {
+                ImGui::InputFloat("X Min", &x_min);
+                ImGui::InputFloat("X Max", &x_max);
+
+                ImGui::InputFloat("Y Min", &y_min);
+                ImGui::InputFloat("Y Max", &y_max);
+
+                ImGui::InputFloat("Z Min", &z_min);
+                ImGui::InputFloat("Z Max", &z_max);
+            }
+
+            if (ImGui::CollapsingHeader("Lighting Argument Ranges")) {
+                ImGui::InputFloat("Floor Hue Min", &floor_hue_min);
+                ImGui::InputFloat("Floor Hue Max", &floor_hue_max);
+
+                ImGui::InputFloat("Spot Theta Min", &spot_theta_min);
+                ImGui::InputFloat("Spot Theta Max", &spot_theta_max);
+
+                ImGui::InputFloat("Spot Phi Min", &spot_phi_min);
+                ImGui::InputFloat("Spot Phi Max", &spot_phi_max);
+
+                ImGui::InputFloat("Spot Hue Min", &spot_hue_min);
+                ImGui::InputFloat("Spot Hue Max", &spot_hue_max);
+            }
+
+            if (ImGui::CollapsingHeader("Model Arguments")) {
+                ImGui::InputText("Model Category", &model_category);
+                ImGui::InputText("Model ID", &model_id);
+            }
 
             ImGui::BeginDisabled(running);
             if (ImGui::Button("Start Jobs")) {
                 running = true;
 
                 for (int i = 0; i < process_count; ++i) {
-                    pid_t pid = startJob("./blender/test_render.py", "output/" + output_dir, rand(), img_res, num_images / process_count, cam_dist);
+                    pid_t pid = startJob("./blender/test_render.py", "output/" + output_dir + std::to_string(i), rand(), img_res, num_images, cam_dist, yaw_min, yaw_max);
                     pids.push_back(pid);
                 }
 
