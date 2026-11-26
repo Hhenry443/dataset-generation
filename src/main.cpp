@@ -7,7 +7,6 @@
 #include <string>
 #include <time.h>
 #include <vector>
-#include <thread>
 #include <future>
 #include <math.h>
 
@@ -59,7 +58,7 @@ struct Job {
     std::atomic<int> finished = 0;
     int total = 0;
     JobParams JP;
-    bool running = false;
+    std::atomic<bool> running = false;
 };
 
 static void glfw_error_callback(int error, const char* description)
@@ -67,109 +66,78 @@ static void glfw_error_callback(int error, const char* description)
     fprintf(stderr, "GLFW Error %d: %s\n", error, description);
 }
 
-void startJob(std::unique_ptr<Job> J) {
+void startJob(Job& J) {
     FILE *fp;
     int status;
     char path[PATH_MAX];
-    
-        std::string output_dir = "output/" + J->JP.output_dir;
-        
-        if (J->JP.model_id == "") {
-            J->running = true;
 
-            fp = popen("./blender/.venv/bin/blenderproc run ./blender/test_render.py", "r");
+    std::string output_dir = "output/" + J.JP.output_dir;
 
-            if (fp == NULL) {
-                std::cerr << "Something went wrong." << std::endl;
-            }
+    std::string cmd = "./blender/.venv/bin/blenderproc run " + J.JP.filename //This differs between us
+        + " --output-dir " + output_dir
+        + " --seed " + std::to_string(J.JP.seed)
+        + " --image-size " + std::to_string(J.JP.image_size)
+        + " --num-images " + std::to_string(J.JP.num_images)
+        + " --camera-distance " + std::to_string(J.JP.cam_dist)
+        + " --yaw-min " + std::to_string(J.JP.yaw_min)
+        + " --yaw-max " + std::to_string(J.JP.yaw_max)
+        + " --pitch-min " + std::to_string(J.JP.pitch_min)
+        + " --pitch-max " + std::to_string(J.JP.pitch_max)
+        + " --roll-min " + std::to_string(J.JP.roll_min)
+        + " --roll-max " + std::to_string(J.JP.roll_max)
+        + " --x-min " + std::to_string(J.JP.x_min)
+        + " --x-max " + std::to_string(J.JP.x_max)
+        + " --y-min " + std::to_string(J.JP.y_min)
+        + " --y-max " + std::to_string(J.JP.y_max)
+        + " --z-min " + std::to_string(J.JP.z_min)
+        + " --z-max " + std::to_string(J.JP.z_max)
+        + " --floor-hue-min " + std::to_string(J.JP.floor_hue_min)
+        + " --floor-hue-max " + std::to_string(J.JP.floor_hue_max)
+        + " --spot-theta-min " + std::to_string(J.JP.spot_theta_min)
+        + " --spot-theta-max " + std::to_string(J.JP.spot_theta_max)
+        + " --spot-phi-min " + std::to_string(J.JP.spot_phi_min)
+        + " --spot-phi-max " + std::to_string(J.JP.spot_phi_max)
+        + " --spot-hue-min " + std::to_string(J.JP.spot_hue_min)
+        + " --spot-hue-max " + std::to_string(J.JP.spot_hue_max)
+        + " --model-category " + J.JP.model_category;
 
-            while (fgets(path, PATH_MAX, fp) != NULL) {
-                if (path[0] == '@') {
-                    J->finished++;
-                    std::cout << path << std::endl;
-                }
-            }
+    // Only pass --model-id if one was actually entered in the GUI.
+    // i will eventually get around to fixing this, probably when i make chanegs to model selection in the GUI
+    if (!J.JP.model_id.empty()) {
+        cmd += " --model-id " + J.JP.model_id;
+    }
 
+    J.running = true;
 
-            J->running = false;
-            status = pclose(fp);
+    fp = popen(cmd.c_str(), "r");
 
-            if (status == -1) {
-                std::cerr << "Something went wrong." << std::endl;
-             } else {
-                std::cerr << "Should be ok" << std::endl;
-            }
+    if (fp == NULL) {
+        std::cerr << "Something went wrong." << std::endl;
+        J.running = false;
+        return; // fgets on a NULL FILE* would crash
+    }
 
-            return;
-
-            execl("./blender/.venv/bin/blenderproc", //This differs between us
-                "blenderproc",
-                "run",
-                J->JP.filename.c_str(),
-                "--output-dir",
-                output_dir.c_str(),
-                "--seed",
-                std::to_string(J->JP.seed).c_str(),
-                "--image-size",
-                std::to_string(J->JP.image_size).c_str(),
-                "--num-images",
-                std::to_string(J->JP.num_images).c_str(),
-                "--camera-distance",
-                std::to_string(J->JP.cam_dist).c_str(),
-                "--yaw-min",
-                std::to_string(J->JP.yaw_min).c_str(),
-                "--yaw-max",
-                std::to_string(J->JP.yaw_max).c_str(),
-                "--pitch-min",
-                std::to_string(J->JP.pitch_min).c_str(),
-                "--pitch-max",
-                std::to_string(J->JP.pitch_max).c_str(),
-                "--roll-min",
-                std::to_string(J->JP.roll_min).c_str(),
-                "--roll-max",
-                std::to_string(J->JP.roll_max).c_str(),
-                "--x-min",
-                std::to_string(J->JP.x_min).c_str(),
-                "--x-max",
-                std::to_string(J->JP.x_max).c_str(),
-                "--y-min",
-                std::to_string(J->JP.y_min).c_str(),
-                "--y-max",
-                std::to_string(J->JP.y_max).c_str(),
-                "--z-min",
-                std::to_string(J->JP.z_min).c_str(),
-                "--z-max",
-                std::to_string(J->JP.z_max).c_str(),
-                "--floor-hue-min",
-                std::to_string(J->JP.floor_hue_min).c_str(),
-                "--floor-hue-max",
-                std::to_string(J->JP.floor_hue_max).c_str(),
-                "--spot-theta-min",
-                std::to_string(J->JP.spot_theta_min).c_str(),
-                "--spot-theta-max",
-                std::to_string(J->JP.spot_theta_max).c_str(),
-                "--spot-phi-min",
-                std::to_string(J->JP.spot_phi_min).c_str(),
-                "--spot-phi-max",
-                std::to_string(J->JP.spot_phi_max).c_str(),
-                "--spot-hue-min",
-                std::to_string(J->JP.spot_hue_min).c_str(),
-                "--spot-hue-max",
-                std::to_string(J->JP.spot_hue_max).c_str(),
-                "--model-category",
-                J->JP.model_category.c_str(),
-                "--model-id",
-                J->JP.model_id.c_str(),
-                (char *)nullptr);
+    while (fgets(path, PATH_MAX, fp) != NULL) {
+        if (path[0] == '@') {
+            J.finished++;
         }
-        perror("Failed to launch BlenderProc");
-        exit(EXIT_FAILURE);
+    }
+
+    J.running = false;
+    status = pclose(fp);
+
+    if (status == -1) {
+        std::cerr << "Something went wrong." << std::endl;
+    } else {
+        std::cerr << "Should be ok" << std::endl;
+    }
 }
 
-bool waitForProcesses(std::vector<Job *> vj) {
-    for (Job *j : vj) {
-        int status;
-        waitpid(j->pid, &status, 0);
+bool checkFinished(std::vector<std::future<void>> &f) {
+    for (auto &F : f) {
+        if (F.wait_for(std::chrono::seconds(0)) != std::future_status::ready) {
+            return false;
+        }
     }
 
     return true;
@@ -241,6 +209,7 @@ int main() {
     ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
     std::vector<std::unique_ptr<Job>> jobs;
+    std::vector<std::future<void>> futures;
 
     // Main loop
     while (!glfwWindowShouldClose(window))
@@ -335,20 +304,16 @@ int main() {
                     curr_jp.output_dir = curr_jp.output_dir + std::to_string(i);
 
                     std::unique_ptr<Job> j = std::make_unique<Job>("Worker " + std::to_string(i),0, 0, JP.num_images, std::move(curr_jp));
-
-                    startJob(j);
                     
-                    jobs.push_back(j.get());
+                    futures.push_back(std::async(std::launch::async, startJob, std::ref(*j)));
+                    jobs.push_back(std::move(j)); // we want to hand over ownership of the Job to the vector
                 }
-
-                fut = std::async(std::launch::async, waitForProcesses, std::move(jobs));
             }
             ImGui::EndDisabled();
 
-            if (running && fut.valid() && fut.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+            if (running && checkFinished(futures)) {
                 running = false;
                 progress = 1;
-                std::cout << "FINISHED THEM ALL" << std::endl;
             } 
 
             if (running) {
@@ -356,18 +321,14 @@ int main() {
                 int finished_all = 0;
                 int total_all = 0;
                 // progress is equal to 
-                for (Job *j: jobs) {
-                    std::cout << "Job foind" <<std::endl;
-                    std::cout << j->finished << std::endl;
+                for (auto& j: jobs) {
                     finished_all += j->finished;
                     total_all += j->total;
                 }
 
-                ImGui::ProgressBar(progress);
-
                 progress = (float)finished_all / (float)total_all;
 
-                ImGui::Text("Running!!!");
+                ImGui::ProgressBar(progress);
             }
 
                        
