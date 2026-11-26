@@ -56,9 +56,9 @@ typedef struct JobParameters {
 struct Job {
     std::string name;
     pid_t pid;
-    int finished = 0;
+    std::atomic<int> finished = 0;
     int total = 0;
-    JobParams *JP;
+    JobParams JP;
     bool running = false;
 };
 
@@ -67,14 +67,14 @@ static void glfw_error_callback(int error, const char* description)
     fprintf(stderr, "GLFW Error %d: %s\n", error, description);
 }
 
-void startJob(Job *J) {
+void startJob(std::unique_ptr<Job> J) {
     FILE *fp;
     int status;
     char path[PATH_MAX];
     
-        std::string output_dir = "output/" + J->JP->output_dir;
+        std::string output_dir = "output/" + J->JP.output_dir;
         
-        if (J->JP->model_id == "") {
+        if (J->JP.model_id == "") {
             J->running = true;
 
             fp = popen("./blender/.venv/bin/blenderproc run ./blender/test_render.py", "r");
@@ -105,121 +105,62 @@ void startJob(Job *J) {
             execl("./blender/.venv/bin/blenderproc", //This differs between us
                 "blenderproc",
                 "run",
-                J->JP->filename.c_str(),
+                J->JP.filename.c_str(),
                 "--output-dir",
                 output_dir.c_str(),
                 "--seed",
-                std::to_string(J->JP->seed).c_str(),
+                std::to_string(J->JP.seed).c_str(),
                 "--image-size",
-                std::to_string(J->JP->image_size).c_str(),
+                std::to_string(J->JP.image_size).c_str(),
                 "--num-images",
-                std::to_string(J->JP->num_images).c_str(),
+                std::to_string(J->JP.num_images).c_str(),
                 "--camera-distance",
-                std::to_string(J->JP->cam_dist).c_str(),
+                std::to_string(J->JP.cam_dist).c_str(),
                 "--yaw-min",
-                std::to_string(J->JP->yaw_min).c_str(),
+                std::to_string(J->JP.yaw_min).c_str(),
                 "--yaw-max",
-                std::to_string(J->JP->yaw_max).c_str(),
+                std::to_string(J->JP.yaw_max).c_str(),
                 "--pitch-min",
-                std::to_string(J->JP->pitch_min).c_str(),
+                std::to_string(J->JP.pitch_min).c_str(),
                 "--pitch-max",
-                std::to_string(J->JP->pitch_max).c_str(),
+                std::to_string(J->JP.pitch_max).c_str(),
                 "--roll-min",
-                std::to_string(J->JP->roll_min).c_str(),
+                std::to_string(J->JP.roll_min).c_str(),
                 "--roll-max",
-                std::to_string(J->JP->roll_max).c_str(),
+                std::to_string(J->JP.roll_max).c_str(),
                 "--x-min",
-                std::to_string(J->JP->x_min).c_str(),
+                std::to_string(J->JP.x_min).c_str(),
                 "--x-max",
-                std::to_string(J->JP->x_max).c_str(),
+                std::to_string(J->JP.x_max).c_str(),
                 "--y-min",
-                std::to_string(J->JP->y_min).c_str(),
+                std::to_string(J->JP.y_min).c_str(),
                 "--y-max",
-                std::to_string(J->JP->y_max).c_str(),
+                std::to_string(J->JP.y_max).c_str(),
                 "--z-min",
-                std::to_string(J->JP->z_min).c_str(),
+                std::to_string(J->JP.z_min).c_str(),
                 "--z-max",
-                std::to_string(J->JP->z_max).c_str(),
+                std::to_string(J->JP.z_max).c_str(),
                 "--floor-hue-min",
-                std::to_string(J->JP->floor_hue_min).c_str(),
+                std::to_string(J->JP.floor_hue_min).c_str(),
                 "--floor-hue-max",
-                std::to_string(J->JP->floor_hue_max).c_str(),
+                std::to_string(J->JP.floor_hue_max).c_str(),
                 "--spot-theta-min",
-                std::to_string(J->JP->spot_theta_min).c_str(),
+                std::to_string(J->JP.spot_theta_min).c_str(),
                 "--spot-theta-max",
-                std::to_string(J->JP->spot_theta_max).c_str(),
+                std::to_string(J->JP.spot_theta_max).c_str(),
                 "--spot-phi-min",
-                std::to_string(J->JP->spot_phi_min).c_str(),
+                std::to_string(J->JP.spot_phi_min).c_str(),
                 "--spot-phi-max",
-                std::to_string(J->JP->spot_phi_max).c_str(),
+                std::to_string(J->JP.spot_phi_max).c_str(),
                 "--spot-hue-min",
-                std::to_string(J->JP->spot_hue_min).c_str(),
+                std::to_string(J->JP.spot_hue_min).c_str(),
                 "--spot-hue-max",
-                std::to_string(J->JP->spot_hue_max).c_str(),
+                std::to_string(J->JP.spot_hue_max).c_str(),
                 "--model-category",
-                J->JP->model_category.c_str(),
+                J->JP.model_category.c_str(),
                 "--model-id",
-                J->JP->model_id.c_str(),
+                J->JP.model_id.c_str(),
                 (char *)nullptr);
-        } else {
-            execl("./blender/.venv/bin/blenderproc", //This differs between us
-                "blenderproc",
-                "run",
-                J->JP->filename.c_str(),
-                "--output-dir",
-                output_dir.c_str(),
-                "--seed",
-                std::to_string(J->JP->seed).c_str(),
-                "--image-size",
-                std::to_string(J->JP->image_size).c_str(),
-                "--num-images",
-                std::to_string(J->JP->num_images).c_str(),
-                "--camera-distance",
-                std::to_string(J->JP->cam_dist).c_str(),
-                "--yaw-min",
-                std::to_string(J->JP->yaw_min).c_str(),
-                "--yaw-max",
-                std::to_string(J->JP->yaw_max).c_str(),
-                "--pitch-min",
-                std::to_string(J->JP->pitch_min).c_str(),
-                "--pitch-max",
-                std::to_string(J->JP->pitch_max).c_str(),
-                "--roll-min",
-                std::to_string(J->JP->roll_min).c_str(),
-                "--roll-max",
-                std::to_string(J->JP->roll_max).c_str(),
-                "--x-min",
-                std::to_string(J->JP->x_min).c_str(),
-                "--x-max",
-                std::to_string(J->JP->x_max).c_str(),
-                "--y-min",
-                std::to_string(J->JP->y_min).c_str(),
-                "--y-max",
-                std::to_string(J->JP->y_max).c_str(),
-                "--z-min",
-                std::to_string(J->JP->z_min).c_str(),
-                "--z-max",
-                std::to_string(J->JP->z_max).c_str(),
-                "--floor-hue-min",
-                std::to_string(J->JP->floor_hue_min).c_str(),
-                "--floor-hue-max",
-                std::to_string(J->JP->floor_hue_max).c_str(),
-                "--spot-theta-min",
-                std::to_string(J->JP->spot_theta_min).c_str(),
-                "--spot-theta-max",
-                std::to_string(J->JP->spot_theta_max).c_str(),
-                "--spot-phi-min",
-                std::to_string(J->JP->spot_phi_min).c_str(),
-                "--spot-phi-max",
-                std::to_string(J->JP->spot_phi_max).c_str(),
-                "--spot-hue-min",
-                std::to_string(J->JP->spot_hue_min).c_str(),
-                "--spot-hue-max",
-                std::to_string(J->JP->spot_hue_max).c_str(),
-                "--model-category",
-                J->JP->model_category.c_str(),
-                (char *)nullptr);
-
         }
         perror("Failed to launch BlenderProc");
         exit(EXIT_FAILURE);
@@ -228,9 +169,7 @@ void startJob(Job *J) {
 bool waitForProcesses(std::vector<Job *> vj) {
     for (Job *j : vj) {
         int status;
-        if (j->running) {
-            return false;
-        }
+        waitpid(j->pid, &status, 0);
     }
 
     return true;
@@ -301,7 +240,7 @@ int main() {
     // Our state
     ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
-    std::vector<Job *> jobs;
+    std::vector<std::unique_ptr<Job>> jobs;
 
     // Main loop
     while (!glfwWindowShouldClose(window))
@@ -395,11 +334,11 @@ int main() {
                     JobParams curr_jp = JP;
                     curr_jp.output_dir = curr_jp.output_dir + std::to_string(i);
 
-                    Job j = {"Worker " + std::to_string(i),0, 0, JP.num_images, &curr_jp};
-                
-                    startJob(&j);
+                    std::unique_ptr<Job> j = std::make_unique<Job>("Worker " + std::to_string(i),0, 0, JP.num_images, std::move(curr_jp));
 
-                    jobs.push_back(&j);
+                    startJob(j);
+                    
+                    jobs.push_back(j.get());
                 }
 
                 fut = std::async(std::launch::async, waitForProcesses, std::move(jobs));
@@ -418,6 +357,7 @@ int main() {
                 int total_all = 0;
                 // progress is equal to 
                 for (Job *j: jobs) {
+                    std::cout << "Job foind" <<std::endl;
                     std::cout << j->finished << std::endl;
                     finished_all += j->finished;
                     total_all += j->total;
