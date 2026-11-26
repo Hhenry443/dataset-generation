@@ -87,6 +87,10 @@ parser.add_argument("--model-category", type=str, default="02691156", help="Shap
 # ShapeNet model ID
 parser.add_argument("--model-id", type=str, default=None, help="Specific ShapeNet model ID to load")
 
+#----------DEVICE ARGUMENT SELECTION----------#
+parser.add_argument("--device", choices=["cpu", "gpu"], default="gpu")
+parser.add_argument("--cpu-threads", type=int, default=0)
+
 args = parser.parse_args()
 
 #----------INPUT ARGUMENT VALIDATION----------#
@@ -124,6 +128,13 @@ for name, minimum, maximum in ranges:
 np.random.seed(args.seed)
 bproc.init()
 
+#----------DEVICE SETUP------------#
+if args.device == "cpu":
+    bproc.renderer.set_render_devices(use_only_cpu=True)
+    if args.cpu_threads > 0:
+        bproc.renderer.set_cpu_threads(args.cpu_threads)
+else:
+    bproc.renderer.set_render_devices(desired_gpu_device_type=["HIP", "CUDA"])
 #----------VARIABLE SETUP----------#
 
 output_dir = args.output_dir

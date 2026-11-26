@@ -26,7 +26,11 @@ typedef struct JobParameters {
     int seed = rand();
     int image_size = 256;
     int num_images = 10;
-    int process_count = 1;
+    int gpu_workers = 1;
+    int cpu_workers = 2;
+    int cpu_threads = 4;
+    float cpu_speed = 0.60f;
+    bool use_cpu = false;
     float cam_dist = 2.5;
     float yaw_min = -(M_PI / 2);
     float yaw_max = M_PI / 2;
@@ -67,11 +71,17 @@ static void glfw_error_callback(int error, const char* description)
 }
 
 void startJob(Job& J) {
+    setenv("ROCR_VISIBLE_DEVICES", "0", 1);
+
     FILE *fp;
     int status;
     char path[PATH_MAX];
 
-    std::string output_dir = "output/" + J.JP.output_dir;
+    std::string env = J.JP.use_cpu
+    ? "HIP_VISIBLE_DEVICES=-1 "
+    : "ROCR_VISIBLE_DEVICES=0 ";
+
+    std::string output_dir = "output/" + J.name;
 
     std::string cmd = "./blender/.venv/bin/blenderproc run " + J.JP.filename //This differs between us
         + " --output-dir " + output_dir
@@ -99,7 +109,9 @@ void startJob(Job& J) {
         + " --spot-phi-max " + std::to_string(J.JP.spot_phi_max)
         + " --spot-hue-min " + std::to_string(J.JP.spot_hue_min)
         + " --spot-hue-max " + std::to_string(J.JP.spot_hue_max)
-        + " --model-category " + J.JP.model_category;
+        + " --model-category " + J.JP.model_category
+        + " --device " + (J.JP.use_cpu ? "cpu" : "gpu")
+        + " --cpu-threads " + std::to_string(J.JP.cpu_threads);
 
     // Only pass --model-id if one was actually entered in the GUI.
     // i will eventually get around to fixing this, probably when i make chanegs to model selection in the GUI
@@ -210,6 +222,7 @@ int main() {
 
     std::vector<std::unique_ptr<Job>> jobs;
     std::vector<std::future<void>> futures;
+    std::time_t begin_time;
 
     // Main loop
     while (!glfwWindowShouldClose(window))
@@ -248,7 +261,11 @@ int main() {
                 ImGui::InputInt("Image Resolution (W & H)", &JP.image_size);
                 ImGui::InputInt("# Images (will be split across processes)", &JP.num_images);
                 ImGui::InputFloat("Camera Distance", &JP.cam_dist);
-                ImGui::InputInt("# of processes", &JP.process_count);
+                ImGui::InputInt("# GPU Workers", &JP.gpu_workers);
+                ImGui::InputInt("# CPU Workers", &JP.cpu_workers);
+                ImGui::InputInt("# CPU Threads per Job (keep low)", &JP.cpu_threads);
+                ImGui::InputFloat("CPU Speed (0.5 being half as good as the GPU)", &JP.cpu_speed);
+                // ImGui::InputInt("# of processes", &JP.process_count);
             }
             
             if (ImGui::CollapsingHeader("Rotation Argument Ranges")) {
@@ -295,15 +312,30 @@ int main() {
 
             ImGui::BeginDisabled(running);
             if (ImGui::Button("Start Jobs")) {
-                running = true;
+                begin_time = std::time(nullptr);
 
+                running = true;
                 JP.filename = "./blender/test_render.py";
                 
-                for (int i = 0; i < JP.process_count; ++i) {
-                    JobParams curr_jp = JP;
-                    curr_jp.output_dir = curr_jp.output_dir + std::to_string(i);
+                int n_workers = JP.cpu_workers + JP.gpu_workers;
+                float total_weight = JP.gpu_workers + JP.cpu_workers * JP.cpu_speed;
+                int assigned = 0;
 
-                    std::unique_ptr<Job> j = std::make_unique<Job>("Worker " + std::to_string(i),0, 0, JP.num_images, std::move(curr_jp));
+                for (int i = 0; i < n_workers; ++i) {
+                    JobParams curr_jp = JP;
+                    curr_jp.use_cpu = (i < JP.cpu_workers);
+                    curr_jp.output_dir = curr_jp.output_dir + std::to_string(i);
+                    curr_jp.seed = JP.seed + 1;
+
+                    float w = curr_jp.use_cpu ? JP.cpu_speed : 1.0f;
+                    curr_jp.num_images = (i == n_workers - 1) ? JP.num_images - assigned : (int)(JP.num_images * w / total_weight);
+                    assigned += curr_jp.num_images;
+
+                    if (curr_jp.num_images == 0) continue;
+
+                    std::string name = (curr_jp.use_cpu ? "CPU-" : "GPU-") + std::to_string(i);
+
+                    auto j = std::make_unique<Job>(name ,0, 0, curr_jp.num_images, std::move(curr_jp));
                     
                     futures.push_back(std::async(std::launch::async, startJob, std::ref(*j)));
                     jobs.push_back(std::move(j)); // we want to hand over ownership of the Job to the vector
@@ -312,6 +344,9 @@ int main() {
             ImGui::EndDisabled();
 
             if (running && checkFinished(futures)) {
+                jobs.clear();
+                futures.clear();
+
                 running = false;
                 progress = 1;
             } 
@@ -329,6 +364,7 @@ int main() {
                 progress = (float)finished_all / (float)total_all;
 
                 ImGui::ProgressBar(progress);
+                ImGui::Text("Time Elapsed: %d s", (int)std::difftime(std::time(nullptr), begin_time));
             }
 
                        
