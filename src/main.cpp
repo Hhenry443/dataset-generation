@@ -35,7 +35,7 @@ pid_t startJob(std::string filename, std::string outputDir, int seed, int image_
     
     if (pid == 0) {
         if (model_id != "") {
-            execl("./blender/.venv/bin/blenderproc", //This differs between us
+            execl("./.venv/bin/blenderproc", //This differs between us
                 "blenderproc",
                 "run",
                 filename.c_str(),
@@ -95,7 +95,7 @@ pid_t startJob(std::string filename, std::string outputDir, int seed, int image_
                 model_id.c_str(),
                 (char *)nullptr);
         } else {
-            execl("./blender/.venv/bin/blenderproc", //This differs between us
+            execl("./.venv/bin/blenderproc", //This differs between us
                 "blenderproc",
                 "run",
                 filename.c_str(),
@@ -172,6 +172,9 @@ bool waitForProcesses(std::vector<pid_t> v) {
 }
 
 int main() {
+
+    srand(time(nullptr)); //Newly added to test, also present on line 373
+
     glfwSetErrorCallback(glfw_error_callback);
     if (!glfwInit())
         return 1;
@@ -367,7 +370,6 @@ int main() {
                 running = true;
 
                 for (int i = 0; i < process_count; ++i) {
-                    srand(time(nullptr));
 
                     pid_t pid;
                     if (!model_id.empty()) {
