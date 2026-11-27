@@ -223,6 +223,7 @@ int main() {
     std::vector<std::unique_ptr<Job>> jobs;
     std::vector<std::future<void>> futures;
     std::time_t begin_time;
+    std::time_t total_time;
 
     // Main loop
     while (!glfwWindowShouldClose(window))
@@ -312,14 +313,15 @@ int main() {
 
             ImGui::BeginDisabled(running);
             if (ImGui::Button("Start Jobs")) {
-                begin_time = std::time(nullptr);
+                begin_time = std::time(nullptr); // Get the start time of the job
 
                 running = true;
                 JP.filename = "./blender/test_render.py";
                 
-                int n_workers = JP.cpu_workers + JP.gpu_workers;
+                int n_workers = JP.cpu_workers + JP.gpu_workers; // This is the total amount of processes that will run
                 float total_weight = JP.gpu_workers + JP.cpu_workers * JP.cpu_speed;
                 int assigned = 0;
+
 
                 for (int i = 0; i < n_workers; ++i) {
                     JobParams curr_jp = JP;
@@ -327,6 +329,9 @@ int main() {
                     curr_jp.output_dir = curr_jp.output_dir + std::to_string(i);
                     curr_jp.seed = JP.seed + 1;
 
+                    // Basically, we allocate an amount of images based on if its a cpu or gpu processes.
+                    // This will result in, for example with 200 images with 1 gpu processes and 2 cpu processes with 0.5 cpu power
+                    // 100 for gpu, then 50 for each cpu
                     float w = curr_jp.use_cpu ? JP.cpu_speed : 1.0f;
                     curr_jp.num_images = (i == n_workers - 1) ? JP.num_images - assigned : (int)(JP.num_images * w / total_weight);
                     assigned += curr_jp.num_images;
@@ -364,11 +369,14 @@ int main() {
                 progress = (float)finished_all / (float)total_all;
 
                 ImGui::ProgressBar(progress);
+                total_time = std::difftime(std::time(nullptr), begin_time);
                 ImGui::Text("Time Elapsed: %d s", (int)std::difftime(std::time(nullptr), begin_time));
             }
 
-                       
-            
+            if (!running) {
+                ImGui::Text("Last Job Time: %d s", (int)total_time);
+            };
+
             ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
             ImGui::End();
         }
